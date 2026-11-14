@@ -12,8 +12,9 @@ Prometheus + Grafana · k6
 
 | | |
 |---|---|
-| Live demo | _add after deploying (see [docs/DEPLOY.md](docs/DEPLOY.md))_ |
-| API docs (Swagger) | _`https://<your-api>.onrender.com/swagger-ui.html`_ |
+| Live demo | **https://first-row-book.vercel.app** |
+| API | https://firstrow.onrender.com/api/v1/events |
+| API docs (Swagger) | https://firstrow.onrender.com/swagger-ui.html |
 
 > The free backend sleeps when idle; the first request after a sleep can take up to ~2 minutes (measured, see below).
 
