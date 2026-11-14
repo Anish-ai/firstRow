@@ -34,7 +34,7 @@ spring:
 firstrow:
   jwt:
     # HMAC-SHA256 signing key, at least 32 bytes. The default is for local dev ONLY:
-    # always set JWT_SECRET in any deployed environment (see docs/DEPLOY.md).
+    # always set JWT_SECRET in any deployed environment.
     secret: ${JWT_SECRET:local-dev-only-secret-change-me-0123456789}
     ttl: ${JWT_TTL:PT1H}
     issuer: firstrow
@@ -61,7 +61,7 @@ springdoc:
 server:
   port: ${PORT:8080}
   # gzip JSON responses over 1 KB. The seat map of a 400-seat event is ~45 KB of repetitive JSON and is
-  # polled every 3 s by every viewer, so this saves a lot of bandwidth (measured: see docs/INTERVIEW_NOTES.md).
+  # polled every 3 s by every viewer, so this saves a lot of bandwidth (measured: 44.7 KB -> 1.9 KB).
   compression:
     enabled: true
     mime-types: application/json,application/problem+json

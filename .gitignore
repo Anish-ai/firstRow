@@ -18,3 +18,7 @@ Thumbs.db
 # Local env files
 .env
 .env.local
+
+# Personal notes, kept local only
+docs/DEPLOY.md
+docs/INTERVIEW_NOTES.md

@@ -16,7 +16,10 @@ Prometheus + Grafana · k6
 | API | https://firstrow.onrender.com/api/v1/events |
 | API docs (Swagger) | https://firstrow.onrender.com/swagger-ui.html |
 
-> The free backend sleeps when idle; the first request after a sleep can take up to ~2 minutes (measured, see below).
+> [!NOTE]
+> **First visit may be slow.** The backend runs on a free hosting tier that goes to sleep after about 15 minutes
+> without traffic. If the events list doesn't load straight away, the server is waking up: **please wait 1–2 minutes
+> and refresh**. After that, everything responds normally.
 
 ## Architecture
 
@@ -30,7 +33,7 @@ flowchart LR
 ```
 
 More: [architecture & data model](docs/ARCHITECTURE.md) · [how concurrency is handled](docs/CONCURRENCY.md) ·
-[API reference](docs/API.md) · [free deployment guide](docs/DEPLOY.md) · [interview notes](docs/INTERVIEW_NOTES.md)
+[API reference](docs/API.md) · [load test results](load-tests/RESULTS.md)
 
 ## Features
 
@@ -70,7 +73,23 @@ fictional.
 
 ## Screenshots
 
-_Add screenshots here: events list, seat map (with a 409 highlighted), checkout countdown, Grafana dashboard._
+Taken from the live site.
+
+**Upcoming events**: each event is a ticket, with filters for premieres and matches.
+
+![Events list](docs/screenshots/01-events.png)
+
+**Seat map**: live seat status, keyboard accessible, with up to 6 seats selected and a running total.
+
+![Seat map with three seats selected](docs/screenshots/02-seat-map.png)
+
+**Checkout**: the seats are held for 5 minutes while you pay (demo payment).
+
+![Checkout with hold countdown](docs/screenshots/03-checkout.png)
+
+**My bookings**: confirmed bookings, which can be cancelled to free the seats.
+
+![My bookings](docs/screenshots/04-my-bookings.png)
 
 ## Tests
 
@@ -131,7 +150,7 @@ backend/     Spring Boot API (Java 21), Flyway migrations, tests
 frontend/    React + TypeScript (Vite), Tailwind, Vitest
 infra/       docker-compose, Prometheus config + alert rules (+ tests), Grafana provisioning + dashboard
 load-tests/  k6 rush test, SQL correctness checks, measured results
-docs/        ARCHITECTURE, CONCURRENCY, API, DEPLOY, INTERVIEW_NOTES
+docs/        ARCHITECTURE, CONCURRENCY, API, screenshots
 ```
 
 ## What I'd do next
