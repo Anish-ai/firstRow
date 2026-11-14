@@ -1,0 +1,5 @@
+# Keep shell scripts with LF endings so mvnw runs inside Linux containers and CI.
+* text=auto
+mvnw text eol=lf
+*.sh text eol=lf
+mvnw.cmd text eol=crlf

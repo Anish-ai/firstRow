@@ -1,0 +1,103 @@
+# Every value that differs between laptop, CI and Render comes from an env var,
+# with a default that works for local development (docker compose / localhost Postgres).
+spring:
+  application:
+    name: firstrow
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/firstrow}
+    username: ${DB_USERNAME:firstrow}
+    password: ${DB_PASSWORD:firstrow}
+    hikari:
+      # Small pool: Render free tier has 512 MB RAM, Neon free tier limits connections.
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      data-source-properties:
+        # Lets the Postgres driver send a JDBC batch of INSERTs as multi-row INSERTs (much faster).
+        reWriteBatchedInserts: true
+  jpa:
+    # Flyway owns the schema. Hibernate only checks that entities match it.
+    hibernate:
+      ddl-auto: validate
+    # Don't keep a DB connection open while the HTTP response is being rendered.
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mvc:
+    # Spring MVC's own errors (bad JSON, wrong param type, 405...) become RFC 7807 ProblemDetail JSON.
+    problemdetails:
+      enabled: true
+
+firstrow:
+  jwt:
+    # HMAC-SHA256 signing key, at least 32 bytes. The default is for local dev ONLY:
+    # always set JWT_SECRET in any deployed environment (see docs/DEPLOY.md).
+    secret: ${JWT_SECRET:local-dev-only-secret-change-me-0123456789}
+    ttl: ${JWT_TTL:PT1H}
+    issuer: firstrow
+  cors:
+    # Comma-separated list of browser origins allowed to call the API.
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173}
+  admin:
+    # If both are set, an ADMIN user with these credentials is created at startup (if missing).
+    email: ${ADMIN_EMAIL:}
+    password: ${ADMIN_PASSWORD:}
+  holds:
+    ttl: ${HOLD_TTL:PT5M}
+    max-seats: 6
+    rate-limit-per-minute: ${HOLD_RATE_LIMIT_PER_MINUTE:10}
+    # Housekeeping only: correctness comes from lazy expiry, not from this job.
+    cleanup-interval: PT30S
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  # Only document our own API, not actuator.
+  paths-to-match: /api/**
+
+server:
+  port: ${PORT:8080}
+  # gzip JSON responses over 1 KB. The seat map of a 400-seat event is ~45 KB of repetitive JSON and is
+  # polled every 3 s by every viewer, so this saves a lot of bandwidth (measured: see docs/INTERVIEW_NOTES.md).
+  compression:
+    enabled: true
+    mime-types: application/json,application/problem+json
+    min-response-size: 1KB
+  # Return RFC 7807 ProblemDetail JSON for Spring MVC errors.
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+  metrics:
+    tags:
+      application: firstrow   # added to every metric, so dashboards can filter by app
+    distribution:
+      # Publish latency histogram buckets so Prometheus/Grafana can compute p95 with histogram_quantile().
+      percentiles-histogram:
+        http.server.requests: true
+
+info:
+  app:
+    name: FirstRow
+    description: Seat booking for premieres and live matches
+
+logging:
+  pattern:
+    # Every log line carries the request id from RequestIdFilter (empty for background jobs).
+    level: "%5p [rid=%X{requestId:-}]"
+  level:
+    com.firstrow: INFO

@@ -1,0 +1,35 @@
+# Alert rules. Firing alerts show at http://localhost:9090/alerts.
+# In production Prometheus would forward them to Alertmanager (email, Slack, PagerDuty...).
+groups:
+  - name: firstrow
+    rules:
+      # More than 5% of API requests failing with a server error for 2 minutes.
+      - alert: HighServerErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{application="firstrow", status=~"5.."}[5m]))
+            /
+          sum(rate(http_server_requests_seconds_count{application="firstrow", uri!~"/actuator.*"}[5m]))
+            > 0.05
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "More than 5% of API requests are failing (5xx)"
+          description: "{{ $value | humanizePercentage }} of requests returned 5xx over the last 5 minutes."
+
+      # Most hold attempts are bouncing off taken seats. Expected briefly when a hot event opens;
+      # if it lasts, users are probably fighting over a nearly sold-out event or a client is retrying blindly.
+      - alert: HoldConflictSpike
+        expr: |
+          (
+            sum(rate(holds_conflicts_total{application="firstrow"}[2m]))
+              /
+            (sum(rate(holds_conflicts_total{application="firstrow"}[2m])) + sum(rate(holds_granted_total{application="firstrow"}[2m])))
+          ) > 0.8
+          and sum(rate(holds_conflicts_total{application="firstrow"}[2m])) > 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Over 80% of seat hold attempts are conflicting"
+          description: "{{ $value | humanizePercentage }} of hold attempts got 409 in the last 2 minutes."

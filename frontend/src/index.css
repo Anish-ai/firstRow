@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/*
+ * FirstRow theme: warm greys ("paper", "ink") + light browns ("sand", "tan", "cocoa"),
+ * with orange reserved for the things you should look at: primary actions, your selection, focus.
+ * Tokens defined here become Tailwind utilities, e.g. --color-paper -> bg-paper, --font-display -> font-display.
+ */
+@theme {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+
+  --color-paper: #f3f0eb;      /* page background: warm light grey */
+  --color-surface: #fbfaf7;    /* cards */
+  --color-line: #ddd5c9;       /* borders */
+  --color-ink: #2a2622;        /* main text: warm charcoal */
+  --color-muted: #6b6259;      /* secondary text (4.9:1 on paper) */
+  --color-graphite: #3b3733;   /* dark panels */
+
+  --color-sand: #ebe0d0;       /* light brown fills */
+  --color-tan: #b8966f;        /* light brown accents */
+  --color-cocoa: #6a4e3a;      /* dark brown text/accents */
+
+  --color-accent: #bf4a12;     /* orange for buttons with white text (5:1 contrast) */
+  --color-accent-strong: #9e3c0c;
+  --color-accent-bright: #f07a2b; /* orange for focus rings, underlines, highlights (non-text) */
+  --color-accent-soft: #fbe6d6;
+}
+
+@layer base {
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /*
+   * One visible focus style for every interactive element (keyboard users must always see where they are).
+   * :focus-visible shows it for keyboard focus but not for mouse clicks.
+   */
+  :focus-visible {
+    outline: 3px solid var(--color-accent-bright);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 font-semibold text-white shadow-[0_1px_0_rgb(0_0_0/0.15)] transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:bg-line disabled:text-muted disabled:shadow-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-graphite/25 bg-surface px-5 py-2.5 font-medium text-ink transition-colors hover:border-graphite/50 hover:bg-sand/60 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-small {
+    @apply inline-flex items-center justify-center rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-sand/70 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-[0_1px_2px_rgb(60_45_30/0.06)];
+  }
+  .field {
+    @apply mt-1 w-full rounded-lg border border-line bg-white px-3 py-2 text-ink transition-colors placeholder:text-muted/70 hover:border-tan focus:border-accent-bright;
+  }
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-cocoa;
+  }
+  .text-link {
+    @apply font-medium text-cocoa underline decoration-accent-bright decoration-2 underline-offset-4 hover:text-accent;
+  }
+  .alert-error {
+    @apply rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900;
+  }
+  .alert-success {
+    @apply rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900;
+  }
+  .alert-warn {
+    @apply rounded-xl border border-tan bg-sand p-4 text-cocoa;
+  }
+  /* Dashed "perforation" line, as on a paper ticket. */
+  .perforation {
+    @apply border-t-2 border-dashed border-line;
+  }
+}
+
+/* Diagonal stripes: marks HELD seats with a pattern, so colour is never the only signal. */
+.pattern-held {
+  background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgb(106 78 58 / 0.28) 4px 6px);
+}
+
+/* Subtle paper grain for the header band, made with CSS only (no image request). */
+.header-band {
+  background-color: var(--color-surface);
+  background-image: radial-gradient(rgb(106 78 58 / 0.06) 1px, transparent 1px);
+  background-size: 6px 6px;
+}

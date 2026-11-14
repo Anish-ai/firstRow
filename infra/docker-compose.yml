@@ -1,0 +1,89 @@
+# Run the whole app locally (from the repo root):   docker compose -f infra/docker-compose.yml up --build
+# Then open http://localhost:5173 (frontend) or http://localhost:8080/swagger-ui.html (API).
+# Flyway creates the schema and seed data on first start.
+#
+# Local admin login: admin@firstrow.local / admin-password-123 (dev only).
+#
+# Services: postgres, backend, frontend. Add `--profile observability` for Prometheus (:9090)
+# and Grafana (:3000, dashboard "FirstRow overview").
+
+name: firstrow
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: firstrow
+      POSTGRES_USER: firstrow
+      POSTGRES_PASSWORD: firstrow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firstrow -d firstrow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/firstrow
+      DB_USERNAME: firstrow
+      DB_PASSWORD: firstrow
+      # Local-only values. Real deployments set their own (see docs/DEPLOY.md).
+      JWT_SECRET: local-dev-only-compose-secret-0123456789abcdef
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      ADMIN_EMAIL: admin@firstrow.local
+      ADMIN_PASSWORD: admin-password-123
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../frontend
+      args:
+        # The browser calls the API, so this is the API address as seen from YOUR machine.
+        VITE_API_URL: http://localhost:8080
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # ---- Observability (opt-in):  docker compose -f infra/docker-compose.yml --profile observability up ----
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    profiles: ["observability"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:13.2.6
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      # Local only: let anyone view dashboards without logging in.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/firstrow-overview.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
