@@ -17,6 +17,10 @@ public final class HoldDtos {
     public record CreateHoldRequest(@NotEmpty List<@NotNull Long> seatIds) {
     }
 
+    /** New full set of seats for an existing hold (max 6). An empty list releases the hold. */
+    public record UpdateHoldSeatsRequest(@NotNull List<@NotNull Long> seatIds) {
+    }
+
     public record HoldResponse(UUID holdId, long eventId, Instant expiresAt, List<SeatView> seats, long totalPaise) {
     }
 }

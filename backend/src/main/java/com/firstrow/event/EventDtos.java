@@ -20,13 +20,14 @@ public final class EventDtos {
         }
     }
 
+    /** {@code version} is what an admin edit must send back (optimistic locking, see Event). */
     public record EventDetail(Long id, String title, EventType type, Instant startsAt, EventStatus status,
-                              VenueView venue, int totalSeats, int availableSeats) {
+                              VenueView venue, int totalSeats, int availableSeats, long version) {
 
         public static EventDetail from(Event event, EventSeatRepository.SeatCounts counts) {
             return new EventDetail(event.getId(), event.getTitle(), event.getType(), event.getStartsAt(),
                     event.getStatus(), VenueView.from(event.getVenue()), counts.totalSeats(),
-                    counts.availableSeats());
+                    counts.availableSeats(), event.getVersion());
         }
     }
 

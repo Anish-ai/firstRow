@@ -1,9 +1,10 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ApiError } from '../api/client';
 import { api } from '../api/endpoints';
 import { useAnnounce } from '../components/Announcer';
+import { Loading } from '../components/Status';
 import { formatCountdown, formatPaise, seatName } from '../lib/format';
 import { holdStorage } from '../lib/holdStorage';
 import { usePageTitle } from '../lib/usePageTitle';
@@ -14,7 +15,12 @@ export function CheckoutPage() {
   const holdId = useParams().holdId ?? '';
   const navigate = useNavigate();
   const announce = useAnnounce();
-  const [hold] = useState(() => holdStorage.get(holdId));
+  const queryClient = useQueryClient();
+  // The server is the source of truth: the user may have changed the hold's seats on the event page
+  // (or in another tab). sessionStorage only remembers which event it was for, for the "not found" case.
+  const [stored] = useState(() => holdStorage.get(holdId));
+  const holdQuery = useQuery({ queryKey: ['hold', holdId], queryFn: () => api.getHold(holdId), retry: false });
+  const hold = holdQuery.data ?? null;
   const [error, setError] = useState<string | null>(null);
   const secondsLeft = useSecondsLeft(hold?.expiresAt);
   const expired = hold !== null && secondsLeft === 0;
@@ -53,15 +59,22 @@ export function CheckoutPage() {
       holdStorage.remove(holdId);
       announce('Seats released.');
       navigate(hold ? `/events/${hold.eventId}` : '/');
+      void queryClient.invalidateQueries({ queryKey: ['myHold'] });
     },
   });
 
+  if (holdQuery.isPending) return <Loading what="your hold" />;
   if (!hold) {
+    const message = holdQuery.error instanceof ApiError ? holdQuery.error.message : 'We couldn’t load this hold.';
     return (
       <div role="alert" className="alert-warn mx-auto max-w-xl">
-        We couldn&apos;t find this hold in this browser tab.{' '}
-        <Link to="/" className="text-link">
+        {message}{' '}
+        <Link to={stored ? `/events/${stored.eventId}` : '/'} className="text-link">
           Choose seats again
+        </Link>{' '}
+        or see{' '}
+        <Link to="/bookings" className="text-link">
+          My bookings
         </Link>
         .
       </div>
@@ -72,7 +85,14 @@ export function CheckoutPage() {
   return (
     <div className="mx-auto max-w-xl">
       <p className="eyebrow">Step 2 of 2</p>
-      <h1 className="mt-2 text-4xl font-semibold">Checkout</h1>
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+        <h1 className="text-4xl font-semibold">Checkout</h1>
+        {!expired && (
+          <Link to={`/events/${hold.eventId}`} className="text-link text-sm">
+            ← Change seats
+          </Link>
+        )}
+      </div>
 
       <div
         className={`mt-6 flex items-center justify-between rounded-2xl p-5 ${

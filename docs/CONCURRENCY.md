@@ -167,6 +167,62 @@ make a second booking impossible even if the code above had a bug.
 Tested by `tenConcurrentConfirmsWithTheSameKeyCreateExactlyOneBooking` (10 threads, 1 booking, 9 replays).
 With the step-7 re-lookup removed, that test fails: the losers get "already booked" instead of their booking.
 
+## 6. One hold per user per event, and at most 6 seats per person
+
+**The problem it fixes.** The 6-seat limit used to apply to each *request*. Every "Hold" click created a new
+hold, so one account could press Back, hold 6 more, and repeat: with the rate limit (10 holds/minute) and a
+5-minute hold time, that's about 50 holds × 6 = 300 seats blocked by one person without paying.
+
+**The rule now:**
+- A user has **at most one active hold per event**. To change seats they *edit* that hold (`PUT /holds/{id}/seats`).
+- A user can have **at most 6 seats per event, counting seats already booked**.
+- Editing never extends the hold's expiry. Otherwise seats could be kept forever by editing every 4 minutes.
+
+**Why the database enforces "one hold", not Java.** "Does this user already have a hold? If not, create one" is
+check-then-act again: two tabs could both see "no hold". Instead there is a partial unique index:
+
+```sql
+CREATE UNIQUE INDEX uq_holds_one_active_per_user_event ON holds (user_id, event_id) WHERE status = 'ACTIVE';
+```
+
+If two requests from the same user insert a hold for the same event at once, the second `INSERT` **waits** on
+the first one's uncommitted index entry. If the first commits, the second fails with a unique violation (409);
+if the first rolls back (for example its seats were taken), the second goes ahead. Tested with 10 simultaneous
+requests from one user: exactly 1 hold.
+
+Two details make this work:
+- **Lazy expiry first.** A hold whose time is up can still be `ACTIVE` until the cleanup job runs, and it would
+  block the index. So `createHold` first expires *this user's* timed-out hold for the event (and frees its seats).
+- **The inserted row acts as a lock.** Once our `INSERT` succeeded, no other hold request of this user for this
+  event can get past its own `INSERT` until we finish. So counting the user's booked seats right after it can't
+  go stale, and "booked + requested ≤ 6" is safe without any extra locking.
+
+**Editing a hold** locks the hold row with `SELECT … FOR UPDATE`, then:
+1. frees the seats no longer wanted,
+2. claims the new seats with the **same atomic conditional `UPDATE`** as a new hold,
+3. updates `holds.seat_count` (confirm compares against it, see V3).
+
+If any new seat was taken, the method throws and the whole transaction rolls back, so the freed seats come
+back too and the hold is exactly as it was. A confirm of the same hold also locks that row
+(`UPDATE holds … SET status = 'CONVERTED'`), so an edit and a payment of one hold can't interleave: whichever
+comes second sees the other's result.
+
+## 7. Admin edits: optimistic locking with `@Version`
+
+Admins edit rarely and think for a while between loading and saving, which is the case optimistic locking is
+for (see section 3). `events.version` is a JPA `@Version` column. The edit request carries the version the form
+was loaded with:
+- If it doesn't match the current version, the API returns 409 ("changed by someone else, reload").
+- If another edit commits between our read and our write, Hibernate's `UPDATE … WHERE id = ? AND version = ?`
+  matches no row and throws, which is also turned into a 409.
+
+Nobody's change is silently overwritten, and no locks are held while an admin is typing.
+
+**Cancelling an event** releases its active holds *before* cancelling its bookings, in one transaction. A
+confirm running at that moment holds its hold row's lock, so the release waits for it. When it commits, its new
+booking is visible to the next statement (READ COMMITTED) and is cancelled too. Confirm also refuses holds of
+events that are no longer `SCHEDULED`.
+
 ## How it's verified
 
 | What | Where | Result |
@@ -175,4 +231,8 @@ With the step-7 re-lookup removed, that test fails: the losers get "already book
 | 40 overlapping multi-seat holds | same | no seat shared between winners; losers hold nothing |
 | Naive check-then-update (experiment) | same tests, code swapped | **10 winners** for one seat: test fails, as it should |
 | 10 concurrent confirms, same key | `BookingIntegrationTest` | 1 booking, 9 idempotent replays |
+| 10 simultaneous holds, same user and event | `HoldEditIntegrationTest` | exactly 1 hold |
+| Edit that hits a taken seat | same | 409, hold unchanged (freed seats restored) |
+| Booked seats count towards 6 | same | 4 booked + 3 more → 409; + 2 more → OK |
+| Admin edit with a stale version | `AdminEventEditIntegrationTest` | 409, first edit kept |
 | 200-user load test × 3 | [`load-tests/RESULTS.md`](../load-tests/RESULTS.md) | 0 double-booked seats (SQL-verified) |

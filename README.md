@@ -39,9 +39,12 @@ More: [architecture & data model](docs/ARCHITECTURE.md) · [how concurrency is h
 
 - **Events and seat maps:** paginated event list with filters; seat map with each seat's live status, refreshed every 3 s.
 - **Seat holds:** up to 6 seats, all-or-nothing, for 5 minutes. A taken seat gives `409` listing exactly which seats.
+  One hold per user per event (a database unique index), which you can edit: drop seats, add others, or release
+  all. The timer doesn't restart, and seats you've already booked count towards the 6-per-person limit.
 - **Bookings:** mock payment, `Idempotency-Key` support (a retry returns the original booking), my bookings, cancel (frees the seats).
 - **Auth:** signup/login with BCrypt and JWT; USER and ADMIN roles.
 - **Admin:** create venues, and events from a layout spec (sections, rows, price tiers by row); seats inserted in one batch.
+  Edit an event's title, type, date and venue (optimistic locking with `@Version`), or cancel it, which cancels its bookings.
 - **Accessible seat map:** every seat is a labelled button ("Section A, Row C, Seat 7, ₹450, available"), full keyboard support, icons and patterns as well as colour, screen-reader announcements.
 - **Robustness:**
   - lazy hold expiry plus a cleanup job
@@ -95,15 +98,16 @@ Taken from the live site.
 
 | Suite | What | Result |
 |---|---|---|
-| Backend (`./mvnw verify`) | 112 tests: JUnit 5 + Mockito unit tests, Spring Boot + **Testcontainers (real Postgres 16)** integration tests | all pass |
-| Coverage (JaCoCo) | service layer / whole backend | **99.6%** / 98.0% of lines |
-| Frontend (`npm test`) | 17 Vitest + Testing Library tests: seat statuses, keyboard operation, 409 handling, idempotency key reuse, hold expiry | all pass |
+| Backend (`./mvnw verify`) | 134 tests: JUnit 5 + Mockito unit tests, Spring Boot + **Testcontainers (real Postgres 16)** integration tests | all pass |
+| Coverage (JaCoCo) | service layer / whole backend | **98.5%** / 97.8% of lines |
+| Frontend (`npm test`) | 23 Vitest + Testing Library tests: seat statuses, keyboard operation, 409 handling, idempotency key reuse, hold expiry, editing a hold, admin event edits | all pass |
 | Alert rules (`promtool test rules`) | rules fire on synthetic incidents, stay quiet on normal load | all pass |
 
 Headline tests:
 
 - **50 threads race for one seat**: exactly 1 hold, 49 × `409`, one hold row in the database.
 - **40 overlapping multi-seat holds**: no seat shared between winners; losers hold nothing (all-or-nothing).
+- **10 simultaneous holds from one user for one event**: exactly 1 hold (no seat hoarding).
 - **10 simultaneous confirms with the same `Idempotency-Key`**: exactly 1 booking, 9 replays.
 - **Expired hold**: another user can hold its seats even though no cleanup job has run.
 

@@ -19,8 +19,13 @@ export function priceTiers(seats: Seat[]): PriceTier[] {
 
 export type SeatState = 'available' | 'selected' | 'held' | 'booked' | 'taken';
 
-export function seatState(seat: Seat, selected: Set<number>, taken: Set<number>): SeatState {
+/**
+ * `mine` = seats in the user's own hold. They're HELD in the seat map, but for this user they are
+ * selectable: selected (kept) or not (will be given back when the hold is updated).
+ */
+export function seatState(seat: Seat, selected: Set<number>, taken: Set<number>, mine: Set<number> = new Set()): SeatState {
   if (taken.has(seat.id)) return 'taken';
+  if (mine.has(seat.id)) return selected.has(seat.id) ? 'selected' : 'available';
   if (seat.status === 'BOOKED') return 'booked';
   if (seat.status === 'HELD') return 'held';
   return selected.has(seat.id) ? 'selected' : 'available';

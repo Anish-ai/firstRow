@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 
@@ -41,6 +42,14 @@ public class Event {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private EventStatus status;
+
+    /**
+     * Optimistic locking: Hibernate adds "AND version = ?" to every UPDATE and bumps the number. If another
+     * transaction changed the row first, nothing matches and Hibernate throws instead of overwriting it.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     protected Event() {
         // for JPA
@@ -76,5 +85,21 @@ public class Event {
 
     public EventStatus getStatus() {
         return status;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    /** Admin edit of the details people see. Seats and prices are not editable (they may already be sold). */
+    public void update(Venue venue, String title, EventType type, Instant startsAt) {
+        this.venue = venue;
+        this.title = title;
+        this.type = type;
+        this.startsAt = startsAt;
+    }
+
+    public void cancel() {
+        this.status = EventStatus.CANCELLED;
     }
 }

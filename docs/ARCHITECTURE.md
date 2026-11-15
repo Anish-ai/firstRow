@@ -174,6 +174,8 @@ erDiagram
 | `INDEX (hold_id)` on `event_seats` | Confirm/release find a hold's seats. |
 | `CHECK chk_hold_fields` | A HELD seat must have `hold_id` and `held_until`; an AVAILABLE seat must have neither. Impossible states can't be stored. |
 | `INDEX (status, expires_at)` on `holds` | Cleanup job finds ACTIVE holds past expiry. |
+| `UNIQUE (user_id, event_id) WHERE status = 'ACTIVE'` on `holds` | One active hold per user per event, even with two tabs racing (see CONCURRENCY.md). |
+| `version` on `events` | JPA `@Version`: an admin edit based on an old copy gets a 409 instead of overwriting. |
 | `UNIQUE (user_id, idempotency_key)` on `bookings` | Final guard for idempotent confirm. |
 | `UNIQUE (hold_id)` on `bookings` | One booking per hold, ever. |
 | `UNIQUE (event_seat_id) WHERE active` on `booking_seats` | A seat is in at most one active booking (see CONCURRENCY.md). |

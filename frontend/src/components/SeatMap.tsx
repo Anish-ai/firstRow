@@ -13,11 +13,15 @@ interface SeatMapProps {
   selectedIds: Set<number>;
   /** Seats that a 409 told us were taken; highlighted until the user picks again. */
   takenIds: Set<number>;
+  /** Seats in the user's own hold: shown as selectable even though they're HELD. */
+  mineIds?: Set<number>;
   onToggle: (seat: Seat) => void;
   stageLabel: string;
 }
 
-export function SeatMap({ seats, selectedIds, takenIds, onToggle, stageLabel }: SeatMapProps) {
+const NONE = new Set<number>();
+
+export function SeatMap({ seats, selectedIds, takenIds, mineIds = NONE, onToggle, stageLabel }: SeatMapProps) {
   const tiers = useMemo(() => priceTiers(seats), [seats]);
   const tierIndex = useMemo(() => new Map(tiers.map((t) => [t.name, t.index])), [tiers]);
   const sections = useMemo(() => groupSeats(seats), [seats]);
@@ -37,6 +41,7 @@ export function SeatMap({ seats, selectedIds, takenIds, onToggle, stageLabel }: 
             rows={section.rows}
             selectedIds={selectedIds}
             takenIds={takenIds}
+            mineIds={mineIds}
             tierIndex={tierIndex}
             onToggle={onToggle}
           />
@@ -51,6 +56,7 @@ interface SectionProps {
   rows: { label: string; seats: Seat[] }[];
   selectedIds: Set<number>;
   takenIds: Set<number>;
+  mineIds: Set<number>;
   tierIndex: Map<string, number>;
   onToggle: (seat: Seat) => void;
 }
@@ -59,7 +65,7 @@ interface SectionProps {
  * One section = one Tab stop ("roving tabindex"): only the active seat has tabIndex=0,
  * arrow keys move the active seat. Without this, a 400-seat stadium would need 400 Tab presses.
  */
-function SeatSection({ name, rows, selectedIds, takenIds, tierIndex, onToggle }: SectionProps) {
+function SeatSection({ name, rows, selectedIds, takenIds, mineIds, tierIndex, onToggle }: SectionProps) {
   const [activeId, setActiveId] = useState<number | null>(null);
   const buttons = useRef(new Map<number, HTMLButtonElement>());
   const firstSeatId = rows[0]?.seats[0]?.id ?? null;
@@ -110,7 +116,7 @@ function SeatSection({ name, rows, selectedIds, takenIds, tierIndex, onToggle }:
                 <SeatButton
                   key={seat.id}
                   seat={seat}
-                  state={seatState(seat, selectedIds, takenIds)}
+                  state={seatState(seat, selectedIds, takenIds, mineIds)}
                   tierIndex={tierIndex.get(seat.priceTier) ?? 0}
                   tabIndex={seat.id === tabStopId ? 0 : -1}
                   buttonRef={(el) => {

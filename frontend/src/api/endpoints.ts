@@ -9,6 +9,7 @@ import type {
   Hold,
   Page,
   SeatMap,
+  UpdateEventRequest,
   Venue,
 } from './types';
 
@@ -32,6 +33,13 @@ export const api = {
   createHold: (eventId: number, seatIds: number[]) =>
     apiFetch<Hold>(`/api/v1/events/${eventId}/holds`, { method: 'POST', body: { seatIds } }),
   releaseHold: (holdId: string) => apiFetch<void>(`/api/v1/holds/${holdId}`, { method: 'DELETE' }),
+  /** Your active hold for an event, or undefined if you have none (204). */
+  getMyHold: (eventId: number) => apiFetch<Hold | undefined>(`/api/v1/holds/me?eventId=${eventId}`),
+  /** One of your holds while it is active (404 once expired, released or booked). */
+  getHold: (holdId: string) => apiFetch<Hold>(`/api/v1/holds/${holdId}`),
+  /** Replace the seats of your hold. The expiry time does not change. */
+  updateHoldSeats: (holdId: string, seatIds: number[]) =>
+    apiFetch<Hold>(`/api/v1/holds/${holdId}/seats`, { method: 'PUT', body: { seatIds } }),
 
   confirmBooking: (holdId: string, idempotencyKey: string) =>
     apiFetch<Booking>('/api/v1/bookings', {
@@ -46,4 +54,7 @@ export const api = {
     apiFetch<Venue>('/api/v1/admin/venues', { method: 'POST', body: { name, city } }),
   createEvent: (request: CreateEventRequest) =>
     apiFetch<EventDetail>('/api/v1/admin/events', { method: 'POST', body: request }),
+  updateEvent: (id: number, request: UpdateEventRequest) =>
+    apiFetch<EventDetail>(`/api/v1/admin/events/${id}`, { method: 'PUT', body: request }),
+  cancelEvent: (id: number) => apiFetch<EventDetail>(`/api/v1/admin/events/${id}/cancel`, { method: 'POST' }),
 };

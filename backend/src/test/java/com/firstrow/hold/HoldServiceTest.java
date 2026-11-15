@@ -12,6 +12,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.firstrow.venue.Venue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -32,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -169,6 +171,67 @@ class HoldServiceTest {
         service.releaseHold(USER, holdId);
 
         verify(holds).freeSeats(holdId);
+    }
+
+    @Test
+    void secondActiveHoldForTheSameEventIsConflict() {
+        when(holds.insertHold(any(), anyLong(), anyLong(), anyInt(), any()))
+                .thenThrow(new DuplicateKeyException("uq_holds_one_active_per_user_event"));
+
+        assertThatThrownBy(() -> service.createHold(USER, EVENT, List.of(1L)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.CONFLICT))
+                .hasMessage("You already have seats on hold for this event. Change or release that hold instead.");
+        verify(holds).expireStaleHold(USER, EVENT); // a timed-out hold is expired first, so it never blocks
+        verify(holds, never()).holdSeats(any(), anyLong(), any(), any());
+    }
+
+    @Test
+    void bookedSeatsCountTowardsTheSixSeatLimit() {
+        when(holds.countBookedSeats(USER, EVENT)).thenReturn(4);
+
+        assertThatThrownBy(() -> service.createHold(USER, EVENT, List.of(1L, 2L, 3L)))
+                .isInstanceOf(ApiException.class)
+                .hasMessage("You can have at most 6 seats per event. You've already booked 4, so you can choose 2 more.");
+        verify(holds, never()).holdSeats(any(), anyLong(), any(), any());
+
+        when(holds.countBookedSeats(USER, EVENT)).thenReturn(6);
+        assertThatThrownBy(() -> service.createHold(USER, EVENT, List.of(1L)))
+                .hasMessage("You already have 6 seats booked for this event, the maximum per person.");
+    }
+
+    @Test
+    void editFreesDroppedSeatsClaimsNewOnesAndKeepsTheExpiry() {
+        UUID holdId = UUID.randomUUID();
+        OffsetDateTime expiry = OffsetDateTime.ofInstant(NOW.plus(Duration.ofMinutes(2)), ZoneOffset.UTC);
+        when(holds.lockActiveHold(holdId, USER)).thenReturn(Optional.of(new HoldRepository.ActiveHold(holdId, EVENT, expiry)));
+        when(holds.findHeldSeats(holdId))
+                .thenReturn(List.of(seat(1L, 100), seat(2L, 100)))
+                .thenReturn(List.of(seat(2L, 100), seat(3L, 100)));
+        when(holds.holdSeats(holdId, EVENT, List.of(3L), expiry)).thenReturn(List.of(seat(3L, 100)));
+
+        HoldResponse response = service.updateHoldSeats(USER, holdId, List.of(2L, 3L));
+
+        verify(holds).freeSeats(holdId, List.of(1L));
+        verify(holds).holdSeats(holdId, EVENT, List.of(3L), expiry); // same expiry: editing doesn't extend it
+        verify(holds).updateSeatCount(holdId, 2);
+        assertThat(response.expiresAt()).isEqualTo(expiry.toInstant());
+        assertThat(response.totalPaise()).isEqualTo(200);
+    }
+
+    @Test
+    void editingAHoldThatIsNoLongerActiveExplainsWhy() {
+        UUID holdId = UUID.randomUUID();
+        when(holds.lockActiveHold(holdId, USER)).thenReturn(Optional.empty());
+        when(holds.findState(holdId, USER)).thenReturn(Optional.of(new HoldRepository.HoldState("ACTIVE", true)));
+
+        assertThatThrownBy(() -> service.updateHoldSeats(USER, holdId, List.of(1L)))
+                .hasMessage("Your hold has expired. Please choose your seats again.");
+
+        when(holds.findState(holdId, USER)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.updateHoldSeats(USER, holdId, List.of(1L)))
+                .isInstanceOfSatisfying(ApiException.class,
+                        e -> assertThat(e.getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 
     private void assertBadRequest(List<Long> seatIds, String message) {

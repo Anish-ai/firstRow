@@ -32,6 +32,17 @@ public final class AdminDtos {
     }
 
     /**
+     * Editable event details. {@code version} must be the one the admin's form was loaded with; if the event
+     * changed since, the update is rejected with 409 so nobody's edit is silently overwritten.
+     */
+    public record UpdateEventRequest(@NotNull Long venueId,
+                                     @NotBlank @Size(max = 200) String title,
+                                     @NotNull EventType type,
+                                     @NotNull @Future Instant startsAt,
+                                     @NotNull Long version) {
+    }
+
+    /**
      * Example: one section "A" with 6 rows of 14 seats; rows 1-2 RECLINER at ₹750, rows 3-6 GOLD at ₹450.
      * <pre>
      * { "sections": [ { "name": "A", "rows": 6, "seatsPerRow": 14, "tiers": [

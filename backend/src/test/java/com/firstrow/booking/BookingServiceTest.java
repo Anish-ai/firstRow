@@ -114,7 +114,7 @@ class BookingServiceTest {
     void expiredHoldIsConflict() {
         when(bookings.findByIdempotencyKey(USER, KEY)).thenReturn(Optional.empty());
         when(bookings.convertHold(HOLD, USER)).thenReturn(Optional.empty());
-        when(bookings.findHold(HOLD, USER)).thenReturn(Optional.of(new HoldState("ACTIVE", true)));
+        when(bookings.findHold(HOLD, USER)).thenReturn(Optional.of(new HoldState("ACTIVE", true, false)));
 
         assertThatThrownBy(() -> service.confirm(USER, HOLD, KEY))
                 .isInstanceOf(ApiException.class)
@@ -125,7 +125,7 @@ class BookingServiceTest {
     void alreadyBookedHoldWithANewKeyIsConflict() {
         when(bookings.findByIdempotencyKey(USER, "new-key")).thenReturn(Optional.empty());
         when(bookings.convertHold(HOLD, USER)).thenReturn(Optional.empty());
-        when(bookings.findHold(HOLD, USER)).thenReturn(Optional.of(new HoldState("CONVERTED", false)));
+        when(bookings.findHold(HOLD, USER)).thenReturn(Optional.of(new HoldState("CONVERTED", false, false)));
 
         assertThatThrownBy(() -> service.confirm(USER, HOLD, "new-key"))
                 .isInstanceOf(ApiException.class)

@@ -23,6 +23,16 @@ export interface EventSummary {
 export interface EventDetail extends EventSummary {
   totalSeats: number;
   availableSeats: number;
+  /** Optimistic-locking version; an admin edit must send it back. */
+  version: number;
+}
+
+export interface UpdateEventRequest {
+  venueId: number;
+  title: string;
+  type: EventType;
+  startsAt: string;
+  version: number;
 }
 
 export interface Page<T> {

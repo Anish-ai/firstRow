@@ -140,6 +140,9 @@ public class BookingService {
     private ApiException holdCannotBeBooked(UUID holdId, long userId) {
         HoldState state = bookings.findHold(holdId, userId)
                 .orElseThrow(() -> ApiException.notFound("Hold " + holdId + " not found"));
+        if (state.eventCancelled() && !state.status().equals("CONVERTED")) {
+            return ApiException.conflict("This event has been cancelled, so it can't be booked.");
+        }
         return switch (state.status()) {
             case "CONVERTED" -> ApiException.conflict("This hold has already been booked");
             case "RELEASED" -> ApiException.conflict("This hold was released. Please choose your seats again.");

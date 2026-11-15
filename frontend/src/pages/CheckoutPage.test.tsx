@@ -27,9 +27,9 @@ function renderCheckout() {
 describe('CheckoutPage', () => {
   it('retries a failed payment with the SAME Idempotency-Key', async () => {
     logIn();
-    holdStorage.save(holdExpiringIn(5 * 60_000));
     let attempts = 0;
     const fetchMock = mockFetch({
+      'GET /api/v1/holds/h-1': () => ({ status: 200, body: holdExpiringIn(5 * 60_000) }),
       'POST /api/v1/bookings': () =>
         ++attempts === 1
           ? { status: 503, body: { status: 503, detail: 'Temporarily unavailable' } }
@@ -38,12 +38,14 @@ describe('CheckoutPage', () => {
     const user = userEvent.setup();
     renderCheckout();
 
-    await user.click(screen.getByRole('button', { name: 'Pay ₹450 (demo payment)' }));
+    await user.click(await screen.findByRole('button', { name: 'Pay ₹450 (demo payment)' }));
     expect(await screen.findByText(/Temporarily unavailable/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Pay ₹450 (demo payment)' }));
 
     expect(await screen.findByRole('heading', { name: 'My bookings page' })).toBeInTheDocument();
-    const keys = fetchMock.mock.calls.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
+    const keys = fetchMock.mock.calls
+      .filter(([, init]) => init?.method === 'POST')
+      .map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
     expect(keys).toHaveLength(2);
     expect(keys[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(keys[1]).toBe(keys[0]);
@@ -51,10 +53,11 @@ describe('CheckoutPage', () => {
 
   it('shows the countdown and disables payment once the hold expires', async () => {
     logIn();
-    holdStorage.save(holdExpiringIn(-1000));
+    // The hold was active when loaded but its time ran out while the page was open.
+    mockFetch({ 'GET /api/v1/holds/h-1': () => ({ status: 200, body: holdExpiringIn(-1000) }) });
     renderCheckout();
 
-    expect(screen.getByRole('timer')).toHaveTextContent('0:00');
+    expect(await screen.findByRole('timer')).toHaveTextContent('0:00');
     expect(screen.getByText('Hold expired')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Pay ₹450 (demo payment)' })).toBeDisabled();
     await waitFor(() =>
@@ -62,11 +65,28 @@ describe('CheckoutPage', () => {
     );
   });
 
-  it('counts down from the hold expiry time', () => {
+  it('counts down from the hold expiry time and links back to change seats', async () => {
     logIn();
-    holdStorage.save(holdExpiringIn(4 * 60_000 + 30_500));
+    mockFetch({ 'GET /api/v1/holds/h-1': () => ({ status: 200, body: holdExpiringIn(4 * 60_000 + 30_500) }) });
     renderCheckout();
 
-    expect(screen.getByRole('timer')).toHaveTextContent('4:31');
+    expect(await screen.findByRole('timer')).toHaveTextContent('4:31');
+    expect(screen.getByRole('link', { name: '← Change seats' })).toHaveAttribute('href', '/events/1');
+  });
+
+  it('explains when the hold is no longer active', async () => {
+    logIn();
+    holdStorage.save(holdExpiringIn(60_000));
+    mockFetch({
+      'GET /api/v1/holds/h-1': () => ({
+        status: 404,
+        body: { status: 404, detail: 'This hold is no longer active. It may have expired, been released or already been paid for.' },
+      }),
+    });
+    renderCheckout();
+
+    expect(await screen.findByText(/This hold is no longer active/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Choose seats again' })).toHaveAttribute('href', '/events/1');
+    expect(screen.queryByRole('button', { name: /demo payment/ })).not.toBeInTheDocument();
   });
 });

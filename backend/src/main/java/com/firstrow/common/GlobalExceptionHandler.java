@@ -3,6 +3,7 @@ package com.firstrow.common;
 import com.firstrow.hold.SeatsUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -59,6 +60,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.info("lock.conflict {}", ex.getClass().getSimpleName());
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 "These seats are being booked by someone else right now. Please try again.");
+    }
+
+    /** JPA @Version clash: someone else saved the same row between our read and our write. */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLock(OptimisticLockingFailureException ex) {
+        log.info("optimistic_lock.conflict {}", ex.getClass().getSimpleName());
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "This was changed by someone else at the same time. Reload it and try again.");
     }
 
     /** Bean Validation failures on a @Valid request body: list every invalid field. */

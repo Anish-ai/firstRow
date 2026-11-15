@@ -19,13 +19,18 @@ Base path: `/api/v1`. JSON in and out. Interactive docs with "Try it out": **`/s
 | GET | `/events?type=&from=&page=&size=` | – | 200 page of events | 400 bad type / size > 50 |
 | GET | `/events/{id}` | – | 200 event + seat counts | 404 |
 | GET | `/events/{id}/seats` | – | 200 seat map (effective status) | 404 |
-| POST | `/events/{id}/holds` | user | 201 hold | 400 (>6 seats, duplicates, seat of another event), 404, 409 taken / event closed, 429 rate limit |
+| POST | `/events/{id}/holds` | user | 201 hold | 400 (>6 seats, duplicates, seat of another event), 404, 409 taken / event closed / you already have a hold for this event / over 6 seats per event, 429 rate limit |
+| GET | `/holds/me?eventId=` | user | 200 your active hold · 204 none | – |
+| GET | `/holds/{holdId}` | owner | 200 hold while active | 404 (expired, released, booked, not yours) |
+| PUT | `/holds/{holdId}/seats` | owner | 200 hold with the new seats · 204 if the list is empty (released) | 400, 404, 409 taken (hold unchanged) / hold not active / over 6 per event, 429 |
 | DELETE | `/holds/{holdId}` | owner | 204 | 404 (not yours / unknown), 409 already finished |
 | POST | `/bookings` + `Idempotency-Key` | user | 201 new booking · 200 replay | 400 missing key, 404 hold, 409 hold expired/booked/released, 422 key reused for another hold |
 | GET | `/bookings/me` | user | 200 list, newest first | – |
 | POST | `/bookings/{id}/cancel` | owner | 200 booking (idempotent) | 404, 409 event already started |
 | POST | `/admin/venues` | ADMIN | 201 venue | 400, 401, 403 |
 | POST | `/admin/events` | ADMIN | 201 event + `Location` | 400 (invalid layout, past date, unknown venue), 401, 403 |
+| PUT | `/admin/events/{id}` | ADMIN | 200 event | 400 (past date, unknown venue), 401, 403, 404, 409 stale `version` / cancelled |
+| POST | `/admin/events/{id}/cancel` | ADMIN | 200 event (idempotent) | 401, 403, 404 |
 
 Outside `/api/v1`: `GET /actuator/health`, `/actuator/info`, `/actuator/prometheus`.
 
@@ -124,7 +129,28 @@ Content-Type: application/json
 }
 ```
 
-429 comes with a `Retry-After` header (seconds). Limit: 10 hold requests per minute per user.
+429 comes with a `Retry-After` header (seconds). Limit: 10 hold requests (create or edit) per minute per user.
+
+**One hold per event, max 6 seats per person.** You can have one active hold per event. A second
+`POST /events/{id}/holds` for the same event returns 409; change your seats with `PUT /holds/{holdId}/seats`
+instead. Seats you've already booked for the event count towards the 6.
+
+### Change the seats of your hold
+
+```http
+PUT /api/v1/holds/4537c96c-f91f-4d43-909f-2487fd969b1f/seats
+Authorization: Bearer eyJ...
+Content-Type: application/json
+
+{ "seatIds": [13, 14, 15] }
+```
+
+200 with the hold's new seats and total. Seats you dropped are free again; new seats are claimed
+all-or-nothing (a 409 with `unavailableSeatIds` leaves your hold exactly as it was). **`expiresAt` does not
+change**: editing doesn't buy more time. `{ "seatIds": [] }` releases the hold (204).
+
+`GET /api/v1/holds/me?eventId=2` returns your active hold for that event (or 204), so a page can show
+"you're holding these seats" after the user navigates away and back.
 
 ### Confirm (mock payment)
 
@@ -182,6 +208,25 @@ Content-Type: application/json
   }
 }
 ```
+
+### Edit or cancel an event (admin)
+
+```http
+PUT /api/v1/admin/events/4
+Authorization: Bearer <admin token>
+Content-Type: application/json
+
+{ "venueId": 2, "title": "Desert Falcons vs Coastal Kings — Semi-final (rescheduled)",
+  "type": "MATCH", "startsAt": "2026-11-29T14:00:00Z", "version": 0 }
+```
+
+`version` comes from `GET /api/v1/events/4`. If someone else saved the event since, the answer is 409 ("changed
+by someone else, reload"). Seat layout and prices can't be edited after creation, because seats may already be sold.
+
+`POST /api/v1/admin/events/4/cancel` cancels the event: no new holds, active holds released, confirmed bookings
+cancelled. Calling it twice is harmless.
+
+### Create an event: layout rules
 
 Rows are numbered from 1 and labelled A–Z (max 26 rows, 50 seats per row, 10 sections, 5 tiers). Every row
 must be covered by exactly one tier, otherwise 400 (e.g. `"Section EAST: row D has no price tier"`). All seats

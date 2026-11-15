@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { ApiError } from '../api/client';
@@ -8,6 +8,7 @@ import { useAnnounce } from '../components/Announcer';
 import { ErrorMessage } from '../components/Status';
 import { rupeesToPaise } from '../lib/format';
 import { usePageTitle } from '../lib/usePageTitle';
+import { ManageEvents } from './ManageEvents';
 
 interface TierDraft {
   name: string;
@@ -32,7 +33,8 @@ export function AdminPage() {
     <>
       <p className="eyebrow">Back office</p>
       <h1 className="mt-2 text-4xl font-semibold">Admin</h1>
-      <p className="mt-2 text-muted">Create venues and events. Seats are generated from the layout.</p>
+      <p className="mt-2 text-muted">Create, edit and cancel events. Seats are generated from the layout.</p>
+      <ManageEvents />
       <CreateEventForm />
     </>
   );
@@ -40,6 +42,7 @@ export function AdminPage() {
 
 function CreateEventForm() {
   const announce = useAnnounce();
+  const queryClient = useQueryClient();
   // There is no "list venues" endpoint, so offer venues we've seen on events plus ones created here.
   const events = useQuery({ queryKey: ['events', 'admin-venues'], queryFn: () => api.listEvents({ size: 50 }) });
   const [createdVenues, setCreatedVenues] = useState<Venue[]>([]);
@@ -63,7 +66,10 @@ function CreateEventForm() {
 
   const create = useMutation({
     mutationFn: (request: CreateEventRequest) => api.createEvent(request),
-    onSuccess: (event) => announce(`Event created with ${event.totalSeats} seats.`),
+    onSuccess: (event) => {
+      announce(`Event created with ${event.totalSeats} seats.`);
+      void queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
   });
 
   function updateSection(index: number, change: Partial<SectionDraft>) {

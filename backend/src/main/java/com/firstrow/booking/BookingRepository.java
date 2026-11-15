@@ -59,14 +59,17 @@ public class BookingRepository {
     }
 
     /**
-     * ACTIVE -> CONVERTED, only if the hold is the user's and has not expired (DB clock).
-     * Locks the hold row, so two confirms of the same hold are serialised: the second one sees CONVERTED.
+     * ACTIVE -> CONVERTED, only if the hold is the user's, has not expired (DB clock) and its event is still
+     * scheduled (an admin may have cancelled it). Locks the hold row, so two confirms of the same hold are
+     * serialised: the second one sees CONVERTED.
      */
     public Optional<ConvertedHold> convertHold(UUID holdId, long userId) {
         return jdbc.sql("""
-                        UPDATE holds SET status = 'CONVERTED'
-                        WHERE id = :holdId AND user_id = :userId AND status = 'ACTIVE' AND expires_at > now()
-                        RETURNING event_id, seat_count
+                        UPDATE holds h SET status = 'CONVERTED'
+                        FROM events e
+                        WHERE h.id = :holdId AND h.user_id = :userId AND h.status = 'ACTIVE' AND h.expires_at > now()
+                          AND e.id = h.event_id AND e.status = 'SCHEDULED'
+                        RETURNING h.event_id, h.seat_count
                         """)
                 .param("holdId", holdId)
                 .param("userId", userId)
@@ -74,12 +77,17 @@ public class BookingRepository {
                 .optional();
     }
 
-    /** The hold's status for this user, and whether its time is up. Empty if not found / not theirs. */
+    /** The hold's status for this user, whether its time is up, and whether its event was cancelled. */
     public Optional<HoldState> findHold(UUID holdId, long userId) {
-        return jdbc.sql("SELECT status, expires_at <= now() AS expired FROM holds WHERE id = :holdId AND user_id = :userId")
+        return jdbc.sql("""
+                        SELECT h.status, h.expires_at <= now() AS expired, e.status = 'CANCELLED' AS event_cancelled
+                        FROM holds h JOIN events e ON e.id = h.event_id
+                        WHERE h.id = :holdId AND h.user_id = :userId
+                        """)
                 .param("holdId", holdId)
                 .param("userId", userId)
-                .query((rs, rowNum) -> new HoldState(rs.getString("status"), rs.getBoolean("expired")))
+                .query((rs, rowNum) -> new HoldState(rs.getString("status"), rs.getBoolean("expired"),
+                        rs.getBoolean("event_cancelled")))
                 .optional();
     }
 
@@ -206,6 +214,6 @@ public class BookingRepository {
     public record ConvertedHold(long eventId, int seatCount) {
     }
 
-    public record HoldState(String status, boolean expired) {
+    public record HoldState(String status, boolean expired, boolean eventCancelled) {
     }
 }

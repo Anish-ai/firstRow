@@ -128,7 +128,12 @@ class HoldApiIntegrationTest extends AbstractIntegrationTest {
     void eleventhHoldInAMinuteIs429WithRetryAfter() throws Exception {
         String token = bearerTokenFor(Role.USER);
         for (int i = 0; i < 10; i++) {
-            hold(token, List.of(seats.get(i))).andExpect(status().isCreated());
+            // One active hold per event, so release each one before the next (releasing isn't rate-limited).
+            String holdId = objectMapper.readTree(hold(token, List.of(seats.get(i)))
+                    .andExpect(status().isCreated())
+                    .andReturn().getResponse().getContentAsString()).get("holdId").asText();
+            mockMvc.perform(delete("/api/v1/holds/{id}", holdId).header("Authorization", token))
+                    .andExpect(status().isNoContent());
         }
 
         hold(token, List.of(seats.get(10)))

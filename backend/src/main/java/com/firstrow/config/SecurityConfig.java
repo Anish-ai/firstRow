@@ -82,7 +82,7 @@ public class SecurityConfig {
     CorsConfigurationSource corsConfigurationSource(FirstRowProperties props) {
         CorsConfiguration cors = new CorsConfiguration();
         cors.setAllowedOrigins(props.cors().allowedOrigins().stream().map(String::trim).toList());
-        cors.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"));
         cors.setExposedHeaders(List.of("X-Request-Id", "Location", "Retry-After", "Idempotent-Replayed"));
         cors.setMaxAge(3600L);
