@@ -90,9 +90,14 @@ Taken from the live site.
 
 ![Checkout with hold countdown](docs/screenshots/03-checkout.png)
 
+**Your hold**: going back from checkout shows the seats you're holding, with the time left. Change them
+(the timer doesn't restart), release them, or continue. One hold per event, so seats can't be hoarded.
+
+![Seat map showing the user's own hold with a countdown](docs/screenshots/04-your-hold.png)
+
 **My bookings**: confirmed bookings, which can be cancelled to free the seats.
 
-![My bookings](docs/screenshots/04-my-bookings.png)
+![My bookings](docs/screenshots/05-my-bookings.png)
 
 ## Tests
 
